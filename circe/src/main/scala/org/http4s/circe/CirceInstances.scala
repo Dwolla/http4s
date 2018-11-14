@@ -109,6 +109,19 @@ trait CirceInstances {
     def decodeJson[A](implicit decoder: Decoder[A]): F[A] =
       self.as(implicitly, jsonOf[F, A])
   }
+
+  implicit def eitherJsonDecoder[F[_] : Sync, A: Decoder, B: Decoder]: EntityDecoder[F, Either[A, B]] =
+    jsonDecoder.flatMapR { json =>
+      json.as[B].leftMap { _ =>
+        json.as[A].leftMap { aFailure =>
+          InvalidMessageBodyFailure("Could not decode message", Option(aFailure))
+        }
+      } match {
+        case Right(b) => DecodeResult.success(Right(b))
+        case Left(Right(a)) => DecodeResult.success(Left(a))
+        case Left(Left(ex)) => DecodeResult.failure(ex)
+      }
+    }
 }
 
 object CirceInstances {
